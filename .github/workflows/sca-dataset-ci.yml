@@ -5,6 +5,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: go_restful
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -12,5 +21,11 @@ jobs:
           go-version-file: go.mod
       - name: Build
         run: go build ./...
+      - name: Apply schema
+        # Same DB as config/local.yml; the tests truncate these tables, so they must exist.
+        env:
+          PGPASSWORD: postgres
+        run: for f in migrations/*.up.sql; do psql -h 127.0.0.1 -U postgres -d go_restful -v ON_ERROR_STOP=1 -f "$f"; done
       - name: Test
-        run: go test -count=1 ./...
+        # -p=1 like the Makefile: the packages share one database.
+        run: go test -count=1 -p=1 ./...
